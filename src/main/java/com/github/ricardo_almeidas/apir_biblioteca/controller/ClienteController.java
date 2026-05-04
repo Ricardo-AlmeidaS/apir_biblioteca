@@ -17,7 +17,7 @@ public class ClienteController {
 
     private final ClienteRepository clienteRepository;
 
-    @PutMapping
+    @PostMapping
     public ResponseEntity<Cliente> clinte(@RequestBody Cliente cliente) {
         return ResponseEntity.status(HttpStatus.OK).body(clienteRepository.save(cliente));
     }
