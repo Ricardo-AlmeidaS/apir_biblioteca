@@ -6,125 +6,168 @@ API REST desenvolvida com **Spring Boot** para gerenciamento de **clientes** e *
 
 ## 🚀 Tecnologias utilizadas
 
-* Java 17+
-* Spring Boot
-* Spring Data JPA
-* MySQL
-* Docker / Docker Compose
-* Swagger (Springdoc OpenAPI)
-
----
-
-## 📦 Como rodar o projeto (PASSO A PASSO)
-
-### ✅ Pré-requisitos
-
-Antes de começar, você precisa ter instalado:
-
+* Java 17
+* Spring Boot 4
+* Spring Data JPA / Hibernate
+* MySQL 8
+* Flyway (migrações de banco)
 * Docker
-* Docker Compose
-* Java 17 (caso queira rodar sem Docker)
+* Swagger / OpenAPI (springdoc)
 
 ---
 
-## 🐳 Subindo o banco de dados com Docker (OBRIGATÓRIO)
+## ⚙️ Profiles de execução
 
-Na raiz do projeto, execute:
+A aplicação possui dois profiles:
+
+| Profile | Uso | Banco de dados | Schema |
+|---|---|---|---|
+| `default` | Desenvolvimento local (IDE / `mvnw`) | `localhost:3306` | `ddl-auto=update` |
+| `prd` | Produção / execução via Docker | configurável por variáveis de ambiente | `ddl-auto=validate` — as tabelas **não** são criadas pela aplicação, apenas validadas. Quem cria/atualiza o schema é o **Flyway**, através de migrações versionadas em `src/main/resources/db/migration` |
+
+---
+
+## 🐳 Rodando a partir da imagem publicada no Docker Hub
+
+A imagem oficial da aplicação está publicada em:
+
+**https://hub.docker.com/r/riichiarelli/apir_biblioteca**
+
+### 1. Baixar a imagem
 
 ```bash
-docker-compose up -d
+docker pull riichiarelli/apir_biblioteca:latest
 ```
 
-Esse comando irá:
+### 2. Subir um banco MySQL
 
-* Criar e iniciar um container MySQL
-* Expor a porta do banco (geralmente 3306)
-
----
-
-### 📄 Exemplo esperado do `docker-compose.yml`
-
-Caso precise recriar:
-
-```yaml
-version: '3.8'
-
-services:
-  mysql:
-    image: mysql:8
-    container_name: mysql_biblioteca
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: biblioteca
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  mysql_data:
-```
-
----
-
-## ▶️ Rodando a aplicação
-
-### Opção 1 — Pela IDE (recomendado)
-
-* Abra o projeto
-* Execute a classe `main` (Spring Boot)
-
----
-
-### Opção 2 — Via terminal
+A aplicação precisa de um MySQL acessível. Suba um container dedicado, na mesma rede Docker que será usada pela aplicação:
 
 ```bash
-./mvnw spring-boot:run
+docker network create apir-net
+
+docker run -d --name mysql-biblioteca --network apir-net \
+  -e MYSQL_ROOT_PASSWORD=root_pwd \
+  -e MYSQL_DATABASE=biblioteca_db \
+  -p 3306:3306 \
+  mysql:8.4
 ```
 
-ou (Windows):
+Aguarde alguns segundos até o MySQL terminar de iniciar antes do próximo passo.
+
+### 3. Rodar a aplicação (profile `prd`)
 
 ```bash
-mvnw spring-boot:run
+docker run -d --name apir-biblioteca --network apir-net \
+  -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prd \
+  -e DB_HOST=mysql-biblioteca \
+  -e DB_PORT=3306 \
+  -e DB_NAME=biblioteca_db \
+  -e DB_USER=root \
+  -e DB_PASSWORD=root_pwd \
+  riichiarelli/apir_biblioteca:latest
+```
+
+> No PowerShell, troque as quebras de linha `\` por acento grave `` ` ``, ou rode o comando em uma única linha.
+
+O comando acima:
+* mapeia a porta **8080** do container para a porta 8080 da máquina;
+* define o profile de execução como **`prd`**;
+* passa as variáveis de ambiente necessárias para conexão com o banco.
+
+### 4. Variáveis de ambiente
+
+| Variável | Obrigatória | Padrão | Descrição |
+|---|---|---|---|
+| `SPRING_PROFILES_ACTIVE` | Sim (para produção) | `default` | Profile de execução (`default` ou `prd`) |
+| `DB_HOST` | Não | `mysql` | Host do MySQL |
+| `DB_PORT` | Não | `3306` | Porta do MySQL |
+| `DB_NAME` | Não | `biblioteca_db` | Nome do banco de dados |
+| `DB_USER` | Não | `root` | Usuário do banco |
+| `DB_PASSWORD` | Não | `root_pwd` | Senha do banco |
+
+### 5. Verificar se subiu corretamente
+
+```bash
+docker logs apir-biblioteca
+```
+
+Deve aparecer `The following 1 profile is active: "prd"` e, em seguida, `Started Application`.
+
+### 6. Parar e remover os containers
+
+```bash
+docker rm -f apir-biblioteca mysql-biblioteca
+docker network rm apir-net
 ```
 
 ---
 
-## 🔌 Acessando a aplicação
+## 📘 Acessando o Swagger / OpenAPI
 
-Após subir:
+Com a aplicação rodando (local ou via Docker), acesse no navegador:
 
-```bash
-http://localhost:8080
+```
+http://localhost:8080/
+```
+
+A UI do Swagger está configurada na raiz da aplicação (`springdoc.swagger-ui.path=/`).
+
+A especificação OpenAPI (JSON) fica disponível em:
+
+```
+http://localhost:8080/v3/api-docs
 ```
 
 ---
 
-## 📘 Swagger (Documentação da API)
+## 💻 Rodando localmente sem Docker (profile `default`)
 
-Acesse:
+### Pré-requisitos
+* Java 17
+* Maven (ou usar o `mvnw` incluso)
+
+### Passos
+
+1. Suba um MySQL local (pode usar o `docker-compose.yml` do projeto):
+   ```bash
+   docker-compose up -d
+   ```
+2. Rode a aplicação (profile `default` já é o padrão):
+   ```bash
+   ./mvnw spring-boot:run
+   ```
+   No Windows: `mvnw spring-boot:run`
+3. Acesse `http://localhost:8080`.
+
+---
+
+## 🏗️ Build da imagem Docker localmente
+
+Caso queira gerar a imagem você mesmo a partir do código-fonte:
 
 ```bash
-http://localhost:8080/swagger-ui/index.html
+docker build -t apir_biblioteca .
 ```
+
+O `Dockerfile` usa build multi-stage: compila o projeto com Maven em uma imagem intermediária e empacota o `.jar` final em uma imagem Java 17 (JRE) enxuta, expondo a porta `8080`.
 
 ---
 
 ## 📚 Endpoints disponíveis
 
----
-
 ### 📖 Livros (`/livros`)
 
-#### ➤ Criar livro
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `POST` | `/livros` | Criar livro |
+| `GET` | `/livros` | Listar livros |
+| `GET` | `/livros/{id}` | Buscar por ID |
+| `PUT` | `/livros/{id}` | Atualizar livro |
+| `DELETE` | `/livros/{id}` | Deletar livro |
 
-```http
-POST /livros
-```
-
-**Body:**
-
+**Body de exemplo (criação):**
 ```json
 {
   "id": 1,
@@ -135,50 +178,17 @@ POST /livros
 }
 ```
 
----
-
-#### ➤ Listar livros
-
-```http
-GET /livros
-```
-
----
-
-#### ➤ Buscar por ID
-
-```http
-GET /livros/{id}
-```
-
----
-
-#### ➤ Atualizar livro
-
-```http
-PUT /livros/{id}
-```
-
----
-
-#### ➤ Deletar livro
-
-```http
-DELETE /livros/{id}
-```
-
----
-
 ### 👤 Clientes (`/cliente`)
 
-#### ➤ Criar cliente
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `PUT` | `/cliente` | Criar cliente |
+| `GET` | `/cliente` | Listar clientes |
+| `GET` | `/cliente/{id}` | Buscar por ID |
+| `PUT` | `/cliente/{id}` | Atualizar cliente |
+| `DELETE` | `/cliente/{id}` | Deletar cliente |
 
-```http
-PUT /cliente
-```
-
-**Body:**
-
+**Body de exemplo (criação):**
 ```json
 {
   "id": 1,
@@ -191,55 +201,13 @@ PUT /cliente
 
 ---
 
-#### ➤ Listar clientes
-
-```http
-GET /cliente
-```
-
----
-
-#### ➤ Buscar por ID
-
-```http
-GET /cliente/{id}
-```
-
----
-
-#### ➤ Atualizar cliente
-
-```http
-PUT /cliente/{id}
-```
-
----
-
-#### ➤ Deletar cliente
-
-```http
-DELETE /cliente/{id}
-```
-
----
-
-## 🗄️ Banco de Dados
-
-* Banco: `biblioteca`
-* As tabelas são criadas automaticamente via:
-
-```properties
-spring.jpa.hibernate.ddl-auto=update
-```
-
----
-
 ## ⚠️ Observações importantes
 
-* O `id` das entidades **não é auto incrementável**, deve ser informado manualmente
-* O endpoint de criação de cliente utiliza `PUT` (não é o padrão REST mais comum)
-* Não há relacionamento entre `Cliente` e `Livro` (está como String)
-* Campos aceitam valores nulos
+* O `id` das entidades **não é auto incrementável**, deve ser informado manualmente.
+* O endpoint de criação de cliente utiliza `PUT` (não é o padrão REST mais comum).
+* Não há relacionamento entre `Cliente` e `Livro` (está como String).
+* Campos aceitam valores nulos.
+* No profile `prd`, o schema do banco é gerenciado exclusivamente pelo **Flyway** — a aplicação não cria nem altera tabelas automaticamente.
 
 ---
 
@@ -256,4 +224,4 @@ spring.jpa.hibernate.ddl-auto=update
 ## 👨‍💻 Autor
 
 Ricardo Almeida
-Projeto desenvolvido para fins de estudo.
+Projeto desenvolvido para fins acadêmicos (Checkpoint 1 — Microservices and Web Engineering).
